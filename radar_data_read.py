@@ -6,19 +6,15 @@ import time
 from inspect import trace
 from operator import add
 from time import sleep
-from turtle import pd
-import pickle
-
+import glob
 import matplotlib.pyplot as plt
 import numpy as np
 import serial
-from dotenv import load_dotenv
 
 # import fft
 from scipy.fftpack import fft
 # smooth
 
-load_dotenv(".env")
 os_name = os.environ.get("OS")
 framePeriodicity = 0
 configs = {
@@ -56,22 +52,19 @@ header = [
     "rangeDoppler",
     "rangeArray",
     "dopplerArray",
-    "interFrameProcessingTime",
-    "transmitOutputTime",
-    "interFrameProcessingMargin",
-    "interChirpProcessingMargin",
-    "activeFrameCPULoad",
-    "interFrameCPULoad",
+    # "interFrameProcessingTime",
+    # "transmitOutputTime",
+    # "interFrameProcessingMargin",
+    # "interChirpProcessingMargin",
+    # "activeFrameCPULoad",
+    # "interFrameCPULoad",
 ]
 
 #  use this if you want to create csv file  , comment the other one file_create ()
 def file_create():
     filename = os.path.abspath("")
-    if os_name == "Windows_NT":
-        filename += time.strftime("\%Y%m%d_%H%M%S")
-    elif os_name == "Ubuntu":
-        filename += time.strftime("/%Y%m%d_%H%M%S")
-    filename += ".pkl"
+    filename += time.strftime("/%Y%m%d_%H%M%S")
+    filename += ".csv"
     with open(filename, "w") as f:
         csv.DictWriter(f, fieldnames=header).writeheader()
 
@@ -107,13 +100,14 @@ def serialConfig(configFileName):
     # Open the serial ports for the configuration and the data ports
 
     # Raspberry pi
-    if os_name == "Ubuntu":
-        CLIport = serial.Serial("/dev/ttyACM0", 115200)
-        Dataport = serial.Serial("/dev/ttyACM1", 921600)
+    ports = glob.glob('/dev/ttyACM*')
+    print(ports)
+    CLIport = serial.Serial('/dev/ttyACM0', 115200)
+    Dataport = serial.Serial('/dev/ttyACM1', 921600)
 
-    elif os_name == "Windows_NT":
-        CLIport = serial.Serial("COM6", 115200)
-        Dataport = serial.Serial("COM9", 921600)
+    # elif os_name == "Windows_NT":
+    #     CLIport = serial.Serial("COM6", 115200)
+    #     Dataport = serial.Serial("COM9", 921600)
 
     # Read the configuration file and send it to the board
     config = [line.rstrip("\r\n") for line in open(configFileName)]
@@ -241,57 +235,39 @@ def change_conf_callback():
     configParameters = parseConfigFile(configFileName)
 
 
-def processDetectedPoints(byteBuffer, idX, configParameters):
-    global configFileName
+def processDetectedpoints(byteVec, vecIdx, numDetectedObjects, configParameters):
+    x = np.zeros(numDetectedObjects,dtype=np.float32)
+    y = np.zeros(numDetectedObjects,dtype=np.float32)
+    z = np.zeros(numDetectedObjects,dtype=np.float32)
+    velocity = np.zeros(numDetectedObjects,dtype=np.float32)
 
-    # word array to convert 4 bytes to a 16-bit number
-    word = [1, 2**8]
-    tlv_numObj = np.matmul(byteBuffer[idX : idX + 2], word)
-    idX += 2
-    tlv_xyzQFormat = 2 ** np.matmul(byteBuffer[idX : idX + 2], word)
-    idX += 2
+    
+    for objectNum in range(numDetectedObjects):
+        startidX = vecIdx+objectNum*16      # size of object is 16
+        x[objectNum] = byteVec[startidX:startidX + 4].view(dtype=np.float32)
+        startidX += 4
+        y[objectNum] = byteVec[startidX:startidX + 4].view(dtype=np.float32)
+        startidX += 4
+        z[objectNum] = byteVec[startidX:startidX + 4].view(dtype=np.float32)
+        startidX += 4
+        velocity[objectNum] = byteVec[startidX:startidX + 4].view(dtype=np.float32)
+        startidX += 4
+    
+    range_val = np.sqrt(x**2+y**2+z**2)
+    rangeidX = np.floor(range_val/configParameters["rangeIdxToMeters"])
+    doppleridX = np.floor(velocity/configParameters["dopplerResolutionMps"])
+    doppler_Val = doppleridX * configParameters["dopplerResolutionMps"]
 
-    # Initialize the arrays
-    rangeIdx = np.zeros(tlv_numObj, dtype="int16")
-    dopplerIdx = np.zeros(tlv_numObj, dtype="int16")
-    peakVal = np.zeros(tlv_numObj, dtype="int16")
-    x = np.zeros(tlv_numObj, dtype="int16")
-    y = np.zeros(tlv_numObj, dtype="int16")
-    z = np.zeros(tlv_numObj, dtype="int16")
 
-    for objectNum in range(tlv_numObj):
-        # Read the data for each object
-        rangeIdx[objectNum] = np.matmul(byteBuffer[idX : idX + 2], word)
-        idX += 2
-        dopplerIdx[objectNum] = np.matmul(byteBuffer[idX : idX + 2], word)
-        idX += 2
-        peakVal[objectNum] = np.matmul(byteBuffer[idX : idX + 2], word)
-        idX += 2
-        x[objectNum] = np.matmul(byteBuffer[idX : idX + 2], word)
-        idX += 2
-        y[objectNum] = np.matmul(byteBuffer[idX : idX + 2], word)
-        idX += 2
-        z[objectNum] = np.matmul(byteBuffer[idX : idX + 2], word)
-        idX += 2
-
-    # Make the necessary corrections and calculate the rest of the data
-    rangeVal = rangeIdx * configParameters["rangeIdxToMeters"]
-    dopplerIdx[dopplerIdx > (configParameters["numDopplerBins"] / 2 - 1)] = (
-        dopplerIdx[dopplerIdx > (configParameters["numDopplerBins"] / 2 - 1)] - 65535
-    )
-    dopplerVal = dopplerIdx * configParameters["dopplerResolutionMps"]
-    x = x / tlv_xyzQFormat
-    y = y / tlv_xyzQFormat
-    z = z / tlv_xyzQFormat
-
+    # # Store the data in the detObj dictionary
+    # detObj = {"numObj": numDetectedObjects, "x": x, "y": y, "z": z, "velocity":velocity, "rangeidX": rangeidX, "doppleridx": doppleridX, "range_val": range_val}
     # Store the data in the detObj dictionary
     detObj = {
-        "numObj": tlv_numObj,
-        "rangeIdx": list(rangeIdx),
-        "range": list(rangeVal),
-        "dopplerIdx": list(dopplerIdx),
-        "doppler": list(dopplerVal),
-        "peakVal": list(peakVal),
+        "numObj": numDetectedObjects,
+        "rangeIdx": list(rangeidX),
+        "range": list(range_val),
+        "dopplerIdx": list(doppleridX),
+        "doppler": list(doppler_Val),
         "x": list(x),
         "y": list(y),
         "z": list(z),
@@ -299,7 +275,7 @@ def processDetectedPoints(byteBuffer, idX, configParameters):
     return detObj
 
 
-def processRangeNoiseProfile(byteBuffer, idX, detObj, configParameters, isRangeProfile):
+def processRangeNoiseProfile(byteBuffer, idX, configParameters, isRangeProfile):
     traceidX = 0
     if isRangeProfile:
         traceidX = 0
@@ -320,6 +296,120 @@ def processRangeNoiseProfile(byteBuffer, idX, detObj, configParameters, isRangeP
     elif traceidX == 2:
         noiseObj = {"noiserp": rp}
         return noiseObj
+
+
+def transform_radix2(real, imag):
+    # Initialization
+    if len(real) != len(imag):
+        raise ValueError("Mismatched lengths")
+    n = len(real)
+    if n == 1:  # Trivial transform
+        return
+    levels = -1
+    for i in range(32):
+        if 1 << i == n:
+            levels = i  # Equal to log2(n)
+    if levels == -1:
+        raise ValueError("Length is not a power of 2")
+    
+    cos_table = np.cos(2 * np.pi * np.arange(n // 2) / n)
+    sin_table = np.sin(2 * np.pi * np.arange(n // 2) / n)
+    
+    # Bit-reversed addressing permutation
+    for i in range(n):
+        j = reverse_bits(i, levels)
+        if j > i:
+            real[i], real[j] = real[j], real[i]
+            imag[i], imag[j] = imag[j], imag[i]
+    
+    # Cooley-Tukey decimation-in-time radix-2 FFT
+    size = 2
+    while size <= n:
+        halfsize = size // 2
+        tablestep = n // size
+        for i in range(0, n, size):
+            for j in range(i, i + halfsize):
+                k = (j - i) * tablestep
+                tpre = real[j + halfsize] * cos_table[k] + imag[j + halfsize] * sin_table[k]
+                tpim = -real[j + halfsize] * sin_table[k] + imag[j + halfsize] * cos_table[k]
+                real[j + halfsize] = real[j] - tpre
+                imag[j + halfsize] = imag[j] - tpim
+                real[j] += tpre
+                imag[j] += tpim
+        size *= 2
+    return real, imag
+
+def reverse_bits(x, bits):
+    y = 0
+    for i in range(bits):
+        y = (y << 1) | (x & 1)
+        x >>= 1
+    return y
+
+
+def transform_bluestein(real, imag):
+    # Find a power-of-2 convolution length m such that m >= n * 2 + 1
+    if len(real) != len(imag):
+        raise ValueError("Mismatched lengths")
+    n = len(real)
+    m = 1
+    while m < n * 2 + 1:
+        m *= 2
+
+    # Trigonometric tables
+    cos_table = np.cos(np.pi * (np.arange(n) ** 2 % (n * 2)) / n)
+    sin_table = np.sin(np.pi * (np.arange(n) ** 2 % (n * 2)) / n)
+
+    # Temporary vectors and preprocessing
+    areal = np.zeros(m)
+    aimag = np.zeros(m)
+    areal[:n] = real * cos_table + imag * sin_table
+    aimag[:n] = -real * sin_table + imag * cos_table
+
+    breal = np.zeros(m)
+    bimag = np.zeros(m)
+    breal[0] = cos_table[0]
+    bimag[0] = sin_table[0]
+    for i in range(1, n):
+        breal[i] = breal[m - i] = cos_table[i]
+        bimag[i] = bimag[m - i] = sin_table[i]
+
+    # Convolution
+    creal, cimag = convolve_complex(areal, aimag, breal, bimag)
+
+    # Postprocessing
+    real[:n] = creal[:n] * cos_table + cimag[:n] * sin_table
+    imag[:n] = -creal[:n] * sin_table + cimag[:n] * cos_table
+    return real, imag
+
+
+def convolve_complex(xreal, ximag, yreal, yimag):
+    n = len(xreal)
+    xreal = np.fft.fft(xreal)
+    ximag = np.fft.fft(ximag)
+    yreal = np.fft.fft(yreal)
+    yimag = np.fft.fft(yimag)
+    
+    zreal = xreal * yreal - ximag * yimag
+    zimag = xreal * yimag + ximag * yreal
+    
+    creal = np.fft.ifft(zreal).real
+    cimag = np.fft.ifft(zimag).real
+    return creal, cimag
+
+
+def transform(real, imag):
+    if len(real) != len(imag):
+        raise ValueError("Mismatched lengths")
+    
+    n = len(real)
+    if n == 0:
+        return
+    elif (n & (n - 1)) == 0:  # Is power of 2
+        real, imag = transform_radix2(real, imag)
+    else:  # More complicated algorithm for arbitrary sizes
+        real, imag = transform_bluestein(real, imag)
+    return real, imag
 
 
 def processAzimuthHeatMap(byteBuffer, idX, configParameters):
@@ -344,7 +434,7 @@ def processAzimuthHeatMap(byteBuffer, idX, configParameters):
             if img[j] > 32767:
                 img[j] = img[j] - 65536
             q_idx = q_idx + 4
-        fft.transform(real, img)
+        real, img = transform(real, img)
         for ri in range(0, NUM_ANGLE_BINS):
             real[ri] = int(math.sqrt(real[ri] * real[ri] + img[ri] * img[ri]))
 
@@ -522,6 +612,7 @@ def readAndParseData16xx(Dataport, configParameters, filename):
     MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP = 4
     MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP = 5
     MMWDEMO_OUTPUT_MSG_STATS = 6
+    MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO = 7
     maxBufferSize = 2**15
     magicWord = [2, 1, 4, 3, 6, 5, 8, 7]
 
@@ -587,7 +678,11 @@ def readAndParseData16xx(Dataport, configParameters, filename):
 
         # Initialize the pointer index
         idX = 0
-
+        detectedPoints_idx = -1
+        rangeProfile_idX = -1
+        noiseProfileidX = -1
+        azimuth_idX = -1
+        rangeDoppler_idX = -1
         # Read the header
         magicNumber = byteBuffer[idX : idX + 8]
         idX += 8
@@ -611,48 +706,46 @@ def readAndParseData16xx(Dataport, configParameters, filename):
         for tlvIdx in range(numTLVs):
             # word array to convert 4 bytes to a 32 bit number
             word = [1, 2**8, 2**16, 2**24]
-
             # Check the header of the TLV message
-            try:
-                tlv_type = np.matmul(byteBuffer[idX : idX + 4], word)
-                print("tlv_type:", tlv_type)
-            except:
-                print("issue")
-                continue
-        
-            if tlv_type < 0 or tlv_type > 6:
-                continue
+            tlv_type = np.matmul(byteBuffer[idX : idX + 4], word)
             idX += 4
             tlv_length = np.matmul(byteBuffer[idX : idX + 4], word)
             idX += 4
             # Read the data depending on the TLV message
             if tlv_type == MMWDEMO_UART_MSG_DETECTED_POINTS:
-                detObj = processDetectedPoints(byteBuffer, idX, configParameters)
-                finalObj.update(detObj)
+                detectedPoints_idx = idX
             elif tlv_type == MMWDEMO_UART_MSG_RANGE_PROFILE:
-                noiseObj = processRangeNoiseProfile(
-                    byteBuffer, idX, detObj, configParameters, isRangeProfile=True
-                )
-                finalObj.update(noiseObj)
+                rangeProfile_idX = idX
             elif tlv_type == MMWDEMO_OUTPUT_MSG_NOISE_PROFILE:
-                noiseObj = processRangeNoiseProfile(
-                    byteBuffer, idX, detObj, configParameters, isRangeProfile=False
-                )
-                finalObj.update(noiseObj)
+                noiseProfileidX = idX
             elif tlv_type == MMWDEMO_OUTPUT_MSG_AZIMUT_STATIC_HEAT_MAP:
-                heatObj = processAzimuthHeatMap(byteBuffer, idX, configParameters)
+                azimuth_idX = idX
             elif tlv_type == MMWDEMO_OUTPUT_MSG_RANGE_DOPPLER_HEAT_MAP:
-                dopplerObj = processRangeDopplerHeatMap(byteBuffer, idX, configParameters)
-                print("dopple"  , len(byteBuffer) , idX)
-                finalObj.update(dopplerObj)
+                rangeDoppler_idX = idX
             elif tlv_type == MMWDEMO_OUTPUT_MSG_STATS:
-                statisticsObj = processStatistics(byteBuffer, idX)
-                finalObj.update(statisticsObj)
+                print(tlv_type)
+            elif tlv_type == MMWDEMO_OUTPUT_MSG_DETECTED_POINTS_SIDE_INFO:
+                sideInfo_idX = idX
 
             idX += tlv_length
-            # except Error as e:
-            #     pass
-        # Remove already processed data
+        
+        if detectedPoints_idx > -1:
+            detObjRes = processDetectedpoints(byteBuffer, detectedPoints_idx, numDetectedObj, configParameters)   
+            finalObj.update(detObjRes)
+        if rangeProfile_idX > -1:
+            noiseObj = processRangeNoiseProfile(byteBuffer, rangeProfile_idX, configParameters, True)
+            finalObj.update(noiseObj)
+        if noiseProfileidX > -1:
+            noiseObj = processRangeNoiseProfile(byteBuffer, rangeProfile_idX, configParameters, False)
+            finalObj.update(noiseObj)
+        if azimuth_idX > -1:
+            heatObj = processAzimuthHeatMap(byteBuffer, azimuth_idX, configParameters)
+            finalObj.update(heatObj)
+        if rangeDoppler_idX > -1:
+            dopplerObj = processRangeDopplerHeatMap(byteBuffer, rangeDoppler_idX, configParameters)
+            finalObj.update(dopplerObj)
+        print(finalObj)
+
         with open(filename, "a") as f:
             writer = csv.DictWriter(f, header)
             writer.writerow(finalObj)
@@ -690,9 +783,9 @@ def parseArg():
 
 # Configurate the serial port
 if __name__ == "__main__":
-    args = parseArg()
+    # args = parseArg()
     print("calling")
-    configFileName = configs[args.conf]
+    configFileName = 'Configurations/iwr1843_al.cfg' #configs[args.conf]
     CLIport, Dataport = serialConfig(configFileName)
     # Get the configuration parameters from the configuration file
     configParameters = parseConfigFile(configFileName)
@@ -720,12 +813,12 @@ if __name__ == "__main__":
                 # Store the current frame into frameData
                 print(finalObj)
                 currentIndex += 1
-            if args.conf == "pointcloud":
-                time.sleep(0.03)
-            elif args.conf == "macro":
-                time.sleep(0.2)
-            else :
-                time.sleep(0.5)
+            # if args.conf == "pointcloud":
+            #     time.sleep(0.03)
+            # elif args.conf == "macro":
+            #     time.sleep(0.2)
+            # else :
+            #     time.sleep(0.5)
 
 
             # time.sleep(0.03)  # Sampling frequency of 30 Hz
