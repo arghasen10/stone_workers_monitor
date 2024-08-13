@@ -1,16 +1,16 @@
 import requests
 import time
+from datetime import datetime
 
-# Replace with your NodeMCU IP address
-NODEMCU_IP = "10.5.20.136"  # Update this with the correct IP if needed
+
+NODEMCU_HOSTNAME = "nodemcu-sensor.local"  
 PORT = 80
 
-# Base URL for HTTP requests
-BASE_URL = f"http://{NODEMCU_IP}:{PORT}"
+BASE_URL = f"http://{NODEMCU_HOSTNAME}:{PORT}"
 
-# Define endpoints for enabling and disabling data collection
 START_ENDPOINT = "/con"
 STOP_ENDPOINT = "/coff"
+SYNC_ENDPOINT = "/sync"
 
 def send_request(endpoint, method="GET", data=None):
     url = f"{BASE_URL}{endpoint}"
@@ -30,6 +30,12 @@ def send_request(endpoint, method="GET", data=None):
         print(f"Request failed: {e}")
         return None
 
+def sync_time():
+    current_time = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+    print(f"Syncing time: {current_time}")
+    send_request(SYNC_ENDPOINT, method="POST", data={"time": current_time})
+
+
 def start_data_collection():
     print("Starting data collection...")
     send_request(START_ENDPOINT)
@@ -39,6 +45,7 @@ def stop_data_collection():
     send_request(STOP_ENDPOINT)
 
 if __name__ == '__main__':
+    sync_time()
     start_data_collection()
     time.sleep(10)
     stop_data_collection()

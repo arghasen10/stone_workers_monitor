@@ -5,11 +5,12 @@
 #include <ESPAsyncWebServer.h>
 
 char tempStr[64];
+char syncedTime[32];
 WIFI wls = WIFI();
 bool enabled = false;
 AsyncWebServer server(80);
 
-const char* serverName = "http://10.5.20.190:6001/sensor";
+const char* serverName = "http://10.5.20.223:6001/sensor";
 
 int post_request(String httpRequestData) {
     WiFiClient client;
@@ -28,7 +29,15 @@ int post_request(String httpRequestData) {
 }
 
 void handle_sync(AsyncWebServerRequest *request) {
-    request->send_P(200, "text/html", "Time Set");
+    if (request->hasParam("time", true)) {
+        String timeParam = request->getParam("time", true)->value();
+        timeParam.toCharArray(syncedTime, 32);  
+        Serial.print("Time synchronized: ");
+        Serial.println(syncedTime);
+        request->send_P(200, "text/html", "Time Set");
+    } else {
+        request->send_P(400, "text/html", "Missing time parameter");
+    }
 }
 
 void handle_con(AsyncWebServerRequest *request) {
@@ -62,7 +71,8 @@ void setup() {
 void loop() {
     wls.Maintain();
     if (enabled) {
-        sprintf(tempStr, "Id=%d&Temp=%d%d.%d&Hum=%d%d.%d&PM2_5=%d%d%d", 1, 10, 10, 10, 10, 10, 10, 10, 10, 10);
+        sprintf(tempStr, "Id=%d&Temp=%d%d.%d&Hum=%d%d.%d&PM2_5=%d%d%d&Time=%s", 
+                1, 10, 10, 10, 10, 10, 10, 10, 10, 10, syncedTime);
         Serial.println(tempStr);
         post_request(tempStr);
     }
