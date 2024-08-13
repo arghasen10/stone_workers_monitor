@@ -2,18 +2,18 @@ import requests
 import time
 from datetime import datetime
 
+NODEMCU_DEVICES = [
+    {"id": 1, "hostname": "nodemcu-sensor1.local"},
+    {"id": 2, "hostname": "nodemcu-sensor2.local"},
+    {"id": 3, "hostname": "nodemcu-sensor3.local"},
+    {"id": 4, "hostname": "nodemcu-sensor4.local"},
+    {"id": 5, "hostname": "nodemcu-sensor5.local"},
+]
 
-NODEMCU_HOSTNAME = "nodemcu-sensor.local"  
 PORT = 80
 
-BASE_URL = f"http://{NODEMCU_HOSTNAME}:{PORT}"
-
-START_ENDPOINT = "/con"
-STOP_ENDPOINT = "/coff"
-SYNC_ENDPOINT = "/sync"
-
-def send_request(endpoint, method="GET", data=None):
-    url = f"{BASE_URL}{endpoint}"
+def send_request(base_url, endpoint, method="GET", data=None):
+    url = f"{base_url}{endpoint}"
     try:
         if method == "GET":
             response = requests.get(url)
@@ -30,23 +30,30 @@ def send_request(endpoint, method="GET", data=None):
         print(f"Request failed: {e}")
         return None
 
-def sync_time():
+def sync_time(device):
     current_time = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-    print(f"Syncing time: {current_time}")
-    send_request(SYNC_ENDPOINT, method="POST", data={"time": current_time})
+    print(f"Syncing time for NodeMCU {device['id']} ({device['hostname']}): {current_time}")
+    base_url = f"http://{device['hostname']}:{PORT}"
+    send_request(base_url, "/sync", method="POST", data={"time": current_time})
 
+def start_data_collection(device):
+    print(f"Starting data collection for NodeMCU {device['id']} ({device['hostname']})...")
+    base_url = f"http://{device['hostname']}:{PORT}"
+    send_request(base_url, "/con")
 
-def start_data_collection():
-    print("Starting data collection...")
-    send_request(START_ENDPOINT)
-
-def stop_data_collection():
-    print("Stopping data collection...")
-    send_request(STOP_ENDPOINT)
+def stop_data_collection(device):
+    print(f"Stopping data collection for NodeMCU {device['id']} ({device['hostname']})...")
+    base_url = f"http://{device['hostname']}:{PORT}"
+    send_request(base_url, "/coff")
 
 if __name__ == '__main__':
-    sync_time()
-    start_data_collection()
+    for device in NODEMCU_DEVICES:
+        sync_time(device)
+        start_data_collection(device)
+    
     time.sleep(10)
-    stop_data_collection()
-    print("Data collection stopped.")
+
+    for device in NODEMCU_DEVICES:
+        stop_data_collection(device)
+    
+    print("Data collection stopped for all devices.")

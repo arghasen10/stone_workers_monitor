@@ -9,6 +9,7 @@ char syncedTime[32];
 WIFI wls = WIFI();
 bool enabled = false;
 AsyncWebServer server(80);
+int nodeID = 3; 
 
 const char* serverName = "http://10.5.20.223:6001/sensor";
 
@@ -53,9 +54,11 @@ void handle_coff(AsyncWebServerRequest *request) {
 void setup() {
     Serial.begin(9600);
     wls.Connect();
-
+    char hostname[32];
+    sprintf(hostname, "nodemcu-sensor%d", nodeID);
+    Serial.print("HostName: ");Serial.println(hostname);
     // Start mDNS with a unique hostname
-    if (!MDNS.begin("nodemcu-sensor")) {
+    if (!MDNS.begin(hostname)) {
         Serial.println("Error setting up MDNS responder!");
         return;
     }
@@ -72,9 +75,10 @@ void loop() {
     wls.Maintain();
     if (enabled) {
         sprintf(tempStr, "Id=%d&Temp=%d%d.%d&Hum=%d%d.%d&PM2_5=%d%d%d&Time=%s", 
-                1, 10, 10, 10, 10, 10, 10, 10, 10, 10, syncedTime);
+                nodeID, 10, 10, 10, 10, 10, 10, 10, 10, 10, syncedTime);
         Serial.println(tempStr);
         post_request(tempStr);
     }
     delay(1000);
 }
+
