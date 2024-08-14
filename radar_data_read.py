@@ -10,6 +10,7 @@ import glob
 import matplotlib.pyplot as plt
 import numpy as np
 import serial
+import sys
 
 # import fft
 from scipy.fftpack import fft
@@ -798,6 +799,16 @@ if __name__ == "__main__":
     filename = file_create()
 
     linecounter = 0
+
+
+    capture_time = 0
+
+    # if len(sys.argv) > 1:
+    #     capture_time = int(sys.argv[1])*60
+    # else:
+    #     capture_time = 5*60
+
+    # start_time = time.time()
 
     while True:
         linecounter += 1
