@@ -11,7 +11,7 @@ bool enabled = false;
 AsyncWebServer server(80);
 int nodeID = 3; 
 
-const char* serverName = "http://10.5.20.223:6001/sensor";
+const char* serverName = "http://10.5.23.207:5001/sensor";
 
 int post_request(String httpRequestData) {
     WiFiClient client;

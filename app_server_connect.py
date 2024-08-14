@@ -2,8 +2,11 @@ import subprocess
 from flask import Flask, request , jsonify
 from datetime import datetime
 import os
+import signal
+from data_collection import sync_time, start_data_collection, stop_data_collection, NODEMCU_DEVICES
 
 app = Flask(__name__)
+fp = open("sensor_data.txt", "a+")
 
 data_collection_process = None
 
@@ -20,6 +23,8 @@ def handle_ControllerOn():
 def handle_SYNCESP():
     data = request.get_json()
     print(f"Received message: {data['message']}")
+    for device in NODEMCU_DEVICES:
+        sync_time(device)
     return jsonify({"status": "success", "message": "Sync ESP is done"}),200
     
 
@@ -50,11 +55,7 @@ def handle_StopmmwaveDataCollection():
     if data['message'] == "stop mmwave datacollection":
         try:
             if data_collection_process:
-                # Terminate the process
-                # data_collection_process.terminate()
-                os.kill(data_collection_process)
-
-                # Optionally, wait for the process to terminate and check the status
+                data_collection_process.terminate()
                 data_collection_process.wait()
 
                 # Reset the variable
@@ -74,6 +75,8 @@ def handle_StopmmwaveDataCollection():
 def handle_StartEspDataCollection():
     data = request.get_json()
     print(f"Received message: {data['message']}")
+    for device in NODEMCU_DEVICES:
+        start_data_collection(device)
     return jsonify({"status": "success", "message": "ESP data collection started.."}),200
     
     
@@ -83,9 +86,22 @@ def handle_StartEspDataCollection():
 def handle_StopEspDataCollection():
     data = request.get_json()
     print(f"Received message: {data['message']}")
+    for device in NODEMCU_DEVICES:
+        stop_data_collection(device)
     return jsonify({"status": "success", "message": "ESP data collection stopped"}),200
     
+
+@app.route('/sensor', methods=['POST'])
+def sensor():
+    # Get form data
+    sensor_data = request.form.to_dict()
+    print(sensor_data)
+    sensor_data['time'] = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+    fp.write(str(sensor_data) + '\n')
+    fp.flush()
     
+    # You can process the sensor data here as needed
+    return "Data received", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
