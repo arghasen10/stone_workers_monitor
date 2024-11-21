@@ -8,6 +8,12 @@ NODEMCU_DEVICES = [
     {"id": 3, "hostname": "nodemcu-sensor3.local"},
     {"id": 4, "hostname": "nodemcu-sensor4.local"},
     {"id": 5, "hostname": "nodemcu-sensor5.local"},
+    {"id": 6, "hostname": "nodemcu-sensor6.local"},
+    {"id": 7, "hostname": "nodemcu-sensor7.local"},
+    {"id": 8, "hostname": "nodemcu-sensor8.local"},
+    {"id": 9, "hostname": "nodemcu-sensor9.local"},
+    {"id": 10, "hostname": "nodemcu-sensor10.local"},
+    {"id": 11, "hostname": "nodemcu-sensor11.local"},
 ]
 
 PORT = 80
@@ -47,13 +53,20 @@ def stop_data_collection(device):
     send_request(base_url, "/coff")
 
 if __name__ == '__main__':
-    for device in NODEMCU_DEVICES:
-        sync_time(device)
-        start_data_collection(device)
-    
-    time.sleep(10)
+    try:
+        for device in NODEMCU_DEVICES:
+            sync_time(device)
+            start_data_collection(device)
 
-    for device in NODEMCU_DEVICES:
-        stop_data_collection(device)
-    
-    print("Data collection stopped for all devices.")
+        print("Data collection is running indefinitely. Press Ctrl+C to stop.")
+        while True:
+            time.sleep(1)  
+
+    except KeyboardInterrupt:
+        print("\nKeyboard interrupt detected. Stopping data collection...")
+
+    finally:
+        for device in NODEMCU_DEVICES:
+            stop_data_collection(device)
+
+        print("Data collection stopped for all devices.")

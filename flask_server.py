@@ -1,9 +1,14 @@
 from datetime import datetime
-from flask import Flask, request
+from flask import Flask, request,jsonify
 
 app = Flask(__name__)
 
 fp = open("sensor_data.txt", "a+")
+
+@app.route('/time', methods=['GET'])
+def get_time():
+    current_time = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+    return jsonify({"time": current_time})
 
 @app.route('/sensor', methods=['POST'])
 def sensor():
