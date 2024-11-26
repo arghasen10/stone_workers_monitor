@@ -20,7 +20,7 @@ class WIFI{
 };
 
 WIFI::WIFI(){
-    wifiMulti.addAP("SMR_LAB", "smrl1991");
+    wifiMulti.addAP("JOFI", "Btcd@925");
     // wifiMulti.addAP("B2", "123#456#");
 }
 

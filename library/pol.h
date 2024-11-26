@@ -13,14 +13,13 @@ class PollutantSensors{
         DUST dust_sensor;
         GAS gas_sensor;
         int nodeID;
-        char syncedTimeval[32];
+        char syncedTimeval[64];
     public:
         char reading[512];
 
         PollutantSensors(uint8_t gas_addr, int nodeID);
         void Sample(Stream &dustport, Stream &co2port);
-        void WriteToBuff(void);
-        void UpdateSyncedTime(const char *syncedTime);
+        void WriteToBuff();
         void setSyncedTime(const char *syncedTime);
 };
 

@@ -55,7 +55,7 @@ def stop_data_collection(device):
 if __name__ == '__main__':
     try:
         for device in NODEMCU_DEVICES:
-            sync_time(device)
+            # sync_time(device)
             start_data_collection(device)
 
         print("Data collection is running indefinitely. Press Ctrl+C to stop.")
